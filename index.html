@@ -1,0 +1,202 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>株価分析アプリ</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@3.0.0/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/hammerjs@2.0.8/hammer.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-zoom@2.0.1/dist/chartjs-plugin-zoom.min.js"></script>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+
+<header>
+  <h1>📈 株価分析アプリ</h1>
+  <span class="subtitle">Yahoo Finance + FMP API</span>
+</header>
+
+<div class="container">
+  <div class="search-section">
+
+    <div class="search-row">
+      <input id="symbolInput" class="search-input" type="text"
+        placeholder="銘柄コードを入力 (例: AAPL, 7203, ^N225, BTC-USD)"
+        value="AAPL" onkeydown="if(event.key==='Enter')searchStock()" />
+      <button class="btn-primary" onclick="searchStock()">分析する</button>
+      <button id="favBtn" class="btn-fav" onclick="toggleFavorite()">☆ お気に入り</button>
+    </div>
+
+    <!-- お気に入り一覧 -->
+    <div id="favRow" class="chip-row" style="display:none;">
+      <span class="chip-label">お気に入り:</span>
+      <div id="favList" style="display:flex;gap:6px;flex-wrap:wrap;"></div>
+    </div>
+
+    <div class="chip-row">
+      <span class="chip-label">人気銘柄:</span>
+      <button class="quick-btn" onclick="quickSearch('AAPL')">Apple</button>
+      <button class="quick-btn" onclick="quickSearch('MSFT')">Microsoft</button>
+      <button class="quick-btn" onclick="quickSearch('NVDA')">NVIDIA</button>
+      <button class="quick-btn" onclick="quickSearch('TSLA')">Tesla</button>
+      <button class="quick-btn" onclick="quickSearch('AMZN')">Amazon</button>
+      <button class="quick-btn" onclick="quickSearch('GOOGL')">Google</button>
+      <button class="quick-btn" onclick="quickSearch('7203.T')">トヨタ</button>
+      <button class="quick-btn" onclick="quickSearch('7974.T')">任天堂</button>
+      <button class="quick-btn" onclick="quickSearch('9984.T')">ソフトバンクG</button>
+      <button class="quick-btn" onclick="quickSearch('6758.T')">ソニー</button>
+      <button class="quick-btn" onclick="quickSearch('^N225')">日経225</button>
+      <button class="quick-btn" onclick="quickSearch('BTC-USD')">BTC</button>
+    </div>
+
+    <div class="period-row">
+      <span class="period-label">期間:</span>
+      <button class="period-btn" onclick="changePeriod(this,'1mo')">1ヶ月</button>
+      <button class="period-btn" onclick="changePeriod(this,'3mo')">3ヶ月</button>
+      <button class="period-btn active" onclick="changePeriod(this,'1y')">1年</button>
+      <button class="period-btn" onclick="changePeriod(this,'2y')">2年</button>
+      <button class="period-btn" onclick="changePeriod(this,'5y')">5年</button>
+    </div>
+  </div>
+
+  <div id="errorBox" class="error-box"></div>
+
+  <div id="loadingBox" class="loading-box">
+    <div class="spinner"></div>
+    <div class="loading-text" id="loadingText">データ取得中...</div>
+  </div>
+
+  <div id="mainContent" class="main-content">
+
+    <div class="stock-header">
+      <div>
+        <div id="stockName" class="stock-name"></div>
+        <div id="stockSymbolInfo" class="stock-symbol-info"></div>
+      </div>
+      <div class="price-block">
+        <div id="currentPrice" class="current-price"></div>
+        <div id="priceChange" class="price-change"></div>
+      </div>
+      <div class="last-updated-wrap">
+        <div id="lastUpdated" class="last-updated"></div>
+        <button class="btn-refresh" id="refreshBtn" onclick="refreshData()">⟳ 最新に更新</button>
+      </div>
+    </div>
+
+    <div class="metrics-grid">
+      <div class="metric-card"><div class="metric-label">前日の終値</div><div id="m-prev" class="metric-value">-</div></div>
+      <div class="metric-card"><div class="metric-label">本日の始値</div><div id="m-open" class="metric-value">-</div></div>
+      <div class="metric-card"><div class="metric-label">本日の高値</div><div id="m-high" class="metric-value up">-</div></div>
+      <div class="metric-card"><div class="metric-label">本日の安値</div><div id="m-low" class="metric-value down">-</div></div>
+      <div class="metric-card"><div class="metric-label">1年間の最高値</div><div id="m-52h" class="metric-value up">-</div></div>
+      <div class="metric-card"><div class="metric-label">1年間の最安値</div><div id="m-52l" class="metric-value down">-</div></div>
+      <div class="metric-card"><div class="metric-label">売買量（出来高）</div><div id="m-vol" class="metric-value">-</div></div>
+      <div class="metric-card"><div class="metric-label">時価総額</div><div id="m-cap" class="metric-value">-</div></div>
+      <div class="metric-card"><div class="metric-label">PER（株価収益率）<span id="m-per-judge" style="margin-left:5px;font-size:10px;padding:1px 5px;border-radius:4px;"></span></div><div id="m-per" class="metric-value">-</div></div>
+      <div class="metric-card"><div class="metric-label">配当利回り<span id="m-div-judge" style="margin-left:5px;font-size:10px;padding:1px 5px;border-radius:4px;"></span></div><div id="m-div" class="metric-value">-</div></div>
+      <div class="metric-card"><div class="metric-label">RSI（過熱感）</div><div id="m-rsi" class="metric-value">-</div></div>
+      <div class="metric-card"><div class="metric-label">取引通貨</div><div id="m-cur" class="metric-value">-</div></div>
+    </div>
+
+    <!-- 価格チャート + 分析 -->
+    <div class="charts-top">
+      <div class="card">
+        <div class="chart-header">
+          <div>
+            <div class="card-title">株価チャート</div>
+            <div class="chart-legend">
+              <span class="legend-item"><span class="legend-line" style="background:#58a6ff;"></span>株価</span>
+              <span class="legend-item"><span class="legend-line" style="background:#d29922;"></span>25日平均</span>
+              <span class="legend-item"><span class="legend-line" style="background:#f0883e;"></span>75日平均</span>
+              <span class="legend-item"><span class="legend-line" style="background:#bc8cff;"></span>200日平均</span>
+            </div>
+          </div>
+          <div class="toggle-group">
+            <button class="toggle-btn active" id="btnLine" onclick="setChartMode('line')">ライン</button>
+            <button class="toggle-btn" id="btnCandle" onclick="setChartMode('candle')">ローソク足</button>
+          </div>
+        </div>
+        <div class="zoom-bar">
+          <span class="zoom-hint">🔍 スクロール:ズーム　ドラッグ:移動　ダブルクリック:リセット</span>
+          <button class="zoom-reset-btn" onclick="resetAllZoom()">ズームリセット ⟳</button>
+        </div>
+        <div class="chart-wrap" style="height:280px;">
+          <canvas id="priceChart"></canvas>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-title">📊 売買サイン分析</div>
+        <div class="card-sub">テクニカル指標をもとに自動判定した参考情報です</div>
+        <div id="analysisContent"></div>
+        <div id="overallSignal" class="overall-signal"></div>
+      </div>
+    </div>
+
+    <!-- 出来高 + RSI -->
+    <div class="charts-bottom">
+      <div class="card">
+        <div class="card-title">売買量（出来高）</div>
+        <div class="card-sub">緑 = 前日より上昇した日　赤 = 前日より下落した日</div>
+        <div class="chart-wrap" style="height:150px;">
+          <canvas id="volumeChart"></canvas>
+        </div>
+        <div style="text-align:right;margin-top:4px;"><button class="zoom-reset-btn" onclick="resetAllZoom()">リセット ⟳</button></div>
+      </div>
+      <div class="card">
+        <div class="card-title">RSI — 買われすぎ・売られすぎ指標</div>
+        <div class="card-sub">70以上 → 買われすぎ（反落注意）　30以下 → 売られすぎ（反発の可能性）</div>
+        <div class="chart-wrap" style="height:150px;">
+          <canvas id="rsiChart"></canvas>
+        </div>
+        <div style="text-align:right;margin-top:4px;"><button class="zoom-reset-btn" onclick="resetAllZoom()">リセット ⟳</button></div>
+      </div>
+    </div>
+
+    <!-- MACD -->
+    <div class="card">
+      <div class="card-title">MACD — トレンドの勢い・転換を見る指標</div>
+      <div class="card-sub">MACDがシグナルを上抜けると上昇の兆し、下抜けると下落の兆し</div>
+      <div style="text-align:right;margin-bottom:4px;"><button class="zoom-reset-btn" onclick="resetAllZoom()">リセット ⟳</button></div>
+      <div class="chart-legend">
+        <span class="legend-item"><span class="legend-line" style="background:#58a6ff;"></span>MACD</span>
+        <span class="legend-item"><span class="legend-line" style="background:#f0883e;"></span>シグナル</span>
+        <span class="legend-item"><span style="width:10px;height:10px;background:#3fb950;opacity:.7;display:inline-block;border-radius:2px;"></span>プラス</span>
+        <span class="legend-item"><span style="width:10px;height:10px;background:#f85149;opacity:.7;display:inline-block;border-radius:2px;"></span>マイナス</span>
+      </div>
+      <div class="chart-wrap" style="height:150px;">
+        <canvas id="macdChart"></canvas>
+      </div>
+    </div>
+
+    <!-- 用語解説 -->
+    <div class="explain-grid">
+      <div class="explain-card">
+        <div class="explain-title">📈 移動平均線とは</div>
+        <div class="explain-text">過去N日間の株価の平均値を結んだ線です。株価がこの線を上回ると「好調」、下回ると「軟調」の目安になります。短期（25日）と長期（75日）の線が交差するタイミングが売買の参考になります。</div>
+      </div>
+      <div class="explain-card">
+        <div class="explain-title">🌡️ RSI（過熱感指標）とは</div>
+        <div class="explain-text">「どれくらい買われているか」を0〜100で示す指標です。<br>70以上 → 買われすぎ（反落注意）<br>30以下 → 売られすぎ（反発の可能性）<br>50付近 → 中立的な状態</div>
+      </div>
+      <div class="explain-card">
+        <div class="explain-title">📊 MACDとは</div>
+        <div class="explain-text">短期・長期の平均値の差からトレンドの勢いを測る指標です。MACDがシグナル線を下から上に抜けると「上昇の兆し」、上から下に抜けると「下落の兆し」のサインとして参考にされます。</div>
+      </div>
+      <div class="explain-card">
+        <div class="explain-title">🕯️ ローソク足とは</div>
+        <div class="explain-text">1本の棒で「始値・高値・安値・終値」の4つを表す図です。<br>緑（陽線）→ 終値が始値より高い（上昇した日）<br>赤（陰線）→ 終値が始値より低い（下落した日）<br>上下の細い線（ひげ）は最高値・最安値を示します。</div>
+      </div>
+    </div>
+
+    <p style="color:#484f58;font-size:11px;text-align:center;margin-top:20px;">
+      ※ この情報は参考目的のみです。実際の投資判断はご自身の責任で行ってください。
+    </p>
+
+  </div>
+</div>
+
+<script src="script.js"></script>
+</body>
+</html>
